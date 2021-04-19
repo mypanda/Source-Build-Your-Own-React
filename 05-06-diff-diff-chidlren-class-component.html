@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>05-diff</title>
+  <script src="https://cdn.jsdelivr.net/npm/babel-standalone@6.26.0/babel.js"></script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // diff 算法
+    function diff(dom, vnode, container) {
+      // 对比节点的变化
+      const ret = diffNode(dom, vnode)
+      if (container) {
+        container.appendChild(ret)
+      }
+      return ret
+    }
+    function diffNode(dom, vnode) {
+      let out = dom
+      if (vnode === undefined || vnode === null || typeof vnode === 'boolean') vnode = ''
+      if (typeof vnode === 'number') {
+        vnode = String(vnode)
+      }
+      if (typeof vnode === 'string') {
+        if (dom && dom.nodeType === 3) {
+          //
+          if (dom.textContent !== vnode) {
+            dom.textContent = vnode
+          }
+        } else {
+          // 其他节点替换文本节点
+          out = document.createTextNode(vnode)
+          if (dom && dom.parentNode) {
+            dom.parentNode.replaceNode(out, dom)
+          }
+        }
+        return out
+      }
+
+      //
+      if(typeof vnode.tag === 'function'){
+        return diffComponent(out,vnode)
+      }
+      // 非文本
+      // 当前不存在dom节点
+      if (!dom) {
+        out = document.createElement(vnode.tag)
+      }
+
+      // 比较子节点（dom节点和组件）
+      if(vnode.childrens && vnode.childrens.length>0 || (out.childNodes && out.childNodes.length > 0)){
+        // 对比子节点
+        diffChildren(out,vnode.childrens)
+      }
+
+      diffAttribute(out, vnode)
+      return out
+    }
+
+    function diffComponent(dom,vnode) {
+      let comp = dom
+      // 如果组件没有变化，重新设置props
+      if(comp && comp.constructor === comp.tag){
+        // 重新设置props
+        setComponentProps(comp,vnode.attrs)
+        // 赋值
+        dom = comp.base
+      }else{
+        // 组件类型发生了变化
+        if(comp){
+          // 先移除旧的组件
+          unmountComponent(comp)
+          comp = null
+        }
+
+        // 1. 创建新的组件
+        comp=createComponent(vnode.tag,vnode.attrs)
+        //2. 设置组件属性
+        setComponentProps(comp,vnode.attrs)
+        // 3. 给当前挂载示例
+        dom = comp.base
+      }
+      return dom
+    }
+    function unmountComponent(comp) {
+      removeNode(comp.base)
+    }
+    function removeNode(dom) {
+      if(dom && dom.parentNode){
+        dom.parentNode.removeNode(dom)
+      }
+    }
+    // 对比子节点
+      function diffChildren(dom, vchildren) {
+        const domChildren = dom.childNodes;
+        const children = [];
+        const keyed = {};
+        // 将有key的节点(用对象保存)和没有key的节点(用数组保存)分开
+        if (domChildren.length > 0) {
+          [...domChildren].forEach(item => {
+            // 获取key
+            const key = item.key;
+            if (key) {
+              // 如果key存在,保存到对象中
+              keyed[key] = item;
+            } else {
+              // 如果key不存在,保存到数组中
+              children.push(item)
+            }
+
+          })
+        }
+        if (vchildren && vchildren.length > 0) {
+          let min = 0;
+          let childrenLen = children.length; //2
+          [...vchildren].forEach((vchild, i) => {
+            // 获取虚拟DOM中所有的key
+            const key = vchild.key;
+            let child;
+            if (key) {
+              // 如果有key,找到对应key值的节点
+              if (keyed[key]) {
+                child = keyed[key];
+                keyed[key] = undefined;
+              }
+            } else if (childrenLen > min) {
+              // alert(1);
+              // 如果没有key,则优先找类型相同的节点
+              for (let j = min; j < childrenLen; j++) {
+                let c = children[j];
+                if (c) {
+                  child = c;
+                  children[j] = undefined;
+                  if (j === childrenLen - 1) childrenLen--;
+                  if (j === min) min++;
+                  break;
+                }
+              }
+            }
+            // 对比
+            child = diffNode(child, vchild);
+            // 更新DOM
+            const f = domChildren[i];
+            if (child && child !== dom && child !== f) {
+              // 如果更新前的对应位置为空，说明此节点是新增的
+              if (!f) {
+                dom.appendChild(child);
+                // 如果更新后的节点和更新前对应位置的下一个节点一样，说明当前位置的节点被移除了
+              } else if (child === f.nextSibling) {
+                removeNode(f);
+                // 将更新后的节点移动到正确的位置
+              } else {
+                // 注意insertBefore的用法，第一个参数是要插入的节点，第二个参数是已存在的节点
+                dom.insertBefore(child, f);
+              }
+            }
+          })
+        }
+      }
+
+    function diffAttribute(dom, vnode) {
+      // 保存之前DOM所有属性
+      const oldAttrs = {}
+      // 写attrs
+      const newAttrs = vnode.attrs
+      const domAttrs = dom.attributes
+
+      // 不知道浏览器babel怎么使用插件，所以使用Array.from
+      Array.from(domAttrs).forEach(item=>{
+        oldAttrs[item.name] = item.value
+      })
+
+      // 原来的属性和新的属性对比，不在新的属性中，则移除掉（属性值为undefined）
+      for(let key in oldAttrs){
+        if(!(key in newAttrs)){
+          setAttribute(dom,key,undefined)
+        }
+      }
+
+      // 更新属性
+      // class='active' abc
+      for(let key in newAttrs){
+        if(oldAttrs[key] !== newAttrs[key]){
+          // 值不同，更新值
+          setAttribute(dom,key,newAttrs[key])
+        }
+      }
+    }
+    // 生命周期
+    class Component {
+      constructor(props = {}) {
+        this.props = props
+        this.state = {}
+      }
+      setState(stateChange) {
+        console.log(arguments)
+        // 对象复制
+        Object.assign(this.state, stateChange)
+        // 渲染对象
+        renderComponent(this)
+      }
+    }
+    const React = {
+      createElement,
+      Component
+    }
+    const ReactDom = {
+      render
+    }
+    class Home extends React.Component {
+      constructor(props) {
+        super(props)
+        this.state = {
+          count: 0
+        }
+      }
+      componentWillMount() {
+        console.log('组件将要加载')
+      }
+      componentWillReceiveProps() {
+        console.log('组件将要接受数据')
+      }
+      componentWillUpdate() {
+        console.log('组件将要更新')
+      }
+      componentDidUpdate() {
+        console.log('组件更新完成')
+      }
+      componentDidMount() {
+        console.log('组件加载完成')
+      }
+      handleClick() {
+        console.log('xx')
+        // <button onClick={this.handleClick.bind(this)}>touch me</button>
+        // 网页版不支持这样写
+        // 先同步写，后续异步
+        this.setState({
+          count: this.state.count + 1
+        })
+      }
+      render() {
+        return (
+          <div className="active" title="123">
+            Hello,
+            <span>React {this.state.count}</span>
+            <button onClick={this.handleClick.bind(this)}>touch me</button>
+          </div>
+        )
+      }
+    }
+
+    const ele = (
+      <div className="active" title="123">
+        Hello,
+        <span>React</span>
+        <button>touch me</button>
+      </div>
+    )
+    function createElement(tag, attrs, ...childrens) {
+      attrs = attrs || {}
+      return {
+        tag,
+        attrs,
+        childrens,
+        key:attrs.key || null
+      }
+    }
+    function render(vnode, container, dom) {
+      // return container.appendChild(_render(vnode))
+      // 修改为diff挂载
+      return diff(dom, vnode, container)
+    }
+    function _render(vnode) {
+      if (vnode === undefined || vnode === null || typeof vnode === 'boolean') vnode = ''
+      // 数值转字符串
+      if (typeof vnode === 'number') {
+        vnode = String(vnode)
+      }
+      if (typeof vnode === 'string') {
+        return document.createTextNode(vnode)
+      }
+
+      // 如果tag是函数，渲染组件
+      if (typeof vnode.tag === 'function') {
+        // 1.创建组件
+        const comp = createComponent(vnode.tag, vnode.attrs)
+        // 2.设置组件的属性
+        setComponentProps(comp, vnode.attrs)
+        // 3.组件渲染的节点对象返回
+        return comp.base
+      }
+      const { tag, attrs, childrens } = vnode
+      const dom = document.createElement(tag)
+      if (attrs) {
+        Object.keys(attrs).forEach(key => {
+          const value = attrs[key]
+          setAttribute(dom, key, attrs[key])
+        })
+      }
+
+      if (childrens) {
+        childrens.forEach(child => {
+          dom.appendChild(_render(child))
+        })
+      }
+
+      return dom
+    }
+    function createComponent(comp, props) {
+      let inst
+      // 判断类组件或者函数组件
+      if (comp.prototype && comp.prototype.render) {
+        inst = new comp(props)
+      } else {
+        // 函数组件扩展成类组件
+        inst = new Component(props)
+        inst.constructor = comp
+        inst.render = function () {
+          return this.constructor(props)
+        }
+      }
+      return inst
+    }
+    function renderComponent(comp) {
+      let base
+      const renderer = comp.render()
+
+      // 更改
+      // base = _render(renderer)
+      base = diffNode(comp.base,renderer)
+      if (comp.base && comp.componentWillUpdate) {
+        comp.componentWillUpdate()
+      }
+
+      if (comp.base && comp.componentDidUpdate) {
+        comp.componentDidUpdate()
+      } else if (comp.componentDidMount) {
+        comp.componentDidMount()
+      }
+
+      // 节点替换,在数据更新的时候
+      // if (comp.base && comp.base.parentNode) {
+      //   comp.base.parentNode.replaceChild(base, comp.base)
+      // }
+      comp.base = base
+    }
+    function setComponentProps(comp, props) {
+      // 组件没有baseDOM
+      if (!comp.base) {
+        if (comp.componentWillMount) {
+          comp.componentWillMount()
+        }
+      } else if (comp.componentWillReceiveProps) {
+        comp.componentWillReceiveProps()
+      }
+
+      // 已经实例化，没有设置props，没有渲染
+      comp.props = props
+      renderComponent(comp)
+    }
+    function setAttribute(dom, key, value) {
+      if (key === 'className') {
+        key = 'class'
+      }
+      if (/on\w+/.test(key)) {
+        key = key.toLowerCase()
+        dom[key] = value || ''
+      } else if (key === 'style') {
+        if (!value || typeof key === 'string') {
+          dom.style.cssText = value || ''
+        } else if (value && typeof key === 'object') {
+          for (let k in value) {
+            if (typeof value[k] === 'number') {
+              dom.style[k] = value[k] + 'px'
+            } else {
+              dom.style[k] = value[k]
+            }
+          }
+        }
+      } else {
+        if (key in dom) {
+          dom[key] = value || ''
+        }
+        if (value) {
+          dom.setAttribute(key, value)
+        } else {
+          dom.removeAttribute(key)
+        }
+      }
+    }
+
+    ReactDom.render(<Home name="panda" />, document.getElementById('root'))
+    // ReactDom.render(ele, document.getElementById('root'))
+  </script>
+</body>
+
+</html>

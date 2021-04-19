@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>01-createElement</title>
+  <script src="https://cdn.jsdelivr.net/npm/babel-standalone@6.26.0/babel.js"></script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // createElement逻辑
+    const React = {
+      createElement
+    }
+    const app = (
+      <div className="active" title="123">
+        Hello,
+        <span>React</span>
+      </div>
+    )
+    function createElement(tag, attrs, ...childrens) {
+      return {
+        tag,
+        attrs,
+        childrens
+      }
+    }
+    console.log(app)
+  </script>
+</body>
+
+</html>

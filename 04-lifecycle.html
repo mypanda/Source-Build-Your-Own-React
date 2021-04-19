@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>04-lifecycle</title>
+  <script src="https://cdn.jsdelivr.net/npm/babel-standalone@6.26.0/babel.js"></script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // 生命周期
+    class Component {
+      constructor(props = {}) {
+        this.props = props
+        this.state = {}
+      }
+      setState(stateChange) {
+        console.log(arguments)
+        // 对象复制
+        Object.assign(this.state, stateChange)
+        // 渲染对象
+        renderComponent(this)
+      }
+    }
+    const React = {
+      createElement,
+      Component
+    }
+    const ReactDom = {
+      render
+    }
+    class Home extends React.Component {
+      constructor(props) {
+        super(props)
+        this.state = {
+          count: 0
+        }
+      }
+      componentWillMount() {
+        console.log('组件将要加载')
+      }
+      componentWillReceiveProps() {
+        console.log('组件将要接受数据')
+      }
+      componentWillUpdate() {
+        console.log('组件将要更新')
+      }
+      componentDidUpdate() {
+        console.log('组件更新完成')
+      }
+      componentDidMount() {
+        console.log('组件加载完成')
+      }
+      handleClick() {
+        console.log('xx')
+        // <button onClick={this.handleClick.bind(this)}>touch me</button>
+        // 网页版不支持这样写
+        // 先同步写，后续异步
+        this.setState({
+          count: this.state.count + 1
+        })
+      }
+      render() {
+        return (
+          <div className="active" title="123">
+            Hello,
+            <span>React {this.state.count}</span>
+            <button onClick={this.handleClick.bind(this)}>touch me</button>
+          </div>
+        )
+      }
+    }
+    function createElement(tag, attrs, ...childrens) {
+      return {
+        tag,
+        attrs,
+        childrens
+      }
+    }
+    function render(vnode, container) {
+      return container.appendChild(_render(vnode))
+    }
+    function _render(vnode) {
+      if (vnode === undefined || vnode === null || typeof vnode === 'boolean') vnode = ''
+      // 数值转字符串
+      if (typeof vnode === 'number') {
+        vnode = String(vnode)
+      }
+      if (typeof vnode === 'string') {
+        return document.createTextNode(vnode)
+      }
+
+      // 如果tag是函数，渲染组件
+      if (typeof vnode.tag === 'function') {
+        // 1.创建组件
+        const comp = createComponent(vnode.tag, vnode.attrs)
+        // 2.设置组件的属性
+        setComponentProps(comp, vnode.attrs)
+        // 3.组件渲染的节点对象返回
+        return comp.base
+      }
+      const { tag, attrs, childrens } = vnode
+      const dom = document.createElement(tag)
+      if (attrs) {
+        Object.keys(attrs).forEach(key => {
+          const value = attrs[key]
+          setAttribute(dom, key, attrs[key])
+        })
+      }
+
+      if (childrens) {
+        childrens.forEach(child => {
+          dom.appendChild(_render(child))
+        })
+      }
+
+      return dom
+    }
+    function createComponent(comp, props) {
+      let inst
+      // 判断类组件或者函数组件
+      if (comp.prototype && comp.prototype.render) {
+        inst = new comp(props)
+      } else {
+        // 函数组件扩展成类组件
+        inst = new Component(props)
+        inst.constructor = comp
+        inst.render = function () {
+          return this.constructor(props)
+        }
+      }
+      return inst
+    }
+    function renderComponent(comp) {
+      let base
+      const renderer = comp.render()
+      base = _render(renderer)
+      if (comp.base && comp.componentWillUpdate) {
+        comp.componentWillUpdate()
+      }
+
+      if (comp.base && comp.componentDidUpdate) {
+        comp.componentDidUpdate()
+      } else if (comp.componentDidMount) {
+        comp.componentDidMount()
+      }
+
+      // 节点替换,在数据更新的时候
+      if (comp.base && comp.base.parentNode) {
+        comp.base.parentNode.replaceChild(base, comp.base)
+      }
+      comp.base = base
+    }
+    function setComponentProps(comp, props) {
+      // 组件没有baseDOM
+      if (!comp.base) {
+        if (comp.componentWillMount) {
+          comp.componentWillMount()
+        }
+      } else if (comp.componentWillReceiveProps) {
+        comp.componentWillReceiveProps()
+      }
+
+      // 已经实例化，没有设置props，没有渲染
+      comp.props = props
+      renderComponent(comp)
+    }
+    function setAttribute(dom, key, value) {
+      if (key === 'className') {
+        key = 'class'
+      }
+      if (/on\w+/.test(key)) {
+        key = key.toLowerCase()
+        dom[key] = value || ''
+      } else if (key === 'style') {
+        if (!value || typeof key === 'string') {
+          dom.style.cssText = value || ''
+        } else if (value && typeof key === 'object') {
+          for (let k in value) {
+            if (typeof value[k] === 'number') {
+              dom.style[k] = value[k] + 'px'
+            } else {
+              dom.style[k] = value[k]
+            }
+          }
+        }
+      } else {
+        if (key in dom) {
+          dom[key] = value || ''
+        }
+        if (value) {
+          dom.setAttribute(key, value)
+        } else {
+          dom.removeAttribute(key)
+        }
+      }
+    }
+
+    ReactDom.render(<Home name="panda" />, document.getElementById('root'))
+  </script>
+</body>
+
+</html>
