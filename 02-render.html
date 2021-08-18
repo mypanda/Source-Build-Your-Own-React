@@ -72,7 +72,7 @@
           // style 可以是字符串也可以是对象
           if(!value || typeof key === 'string'){
             dom.style.cssText = value || ''
-          }else if(value && typeof key === 'object'){
+          }else if(value && typeof value === 'object'){
             // {width:200}
             for(let k in value){
               if(typeof value[k] === 'number'){
